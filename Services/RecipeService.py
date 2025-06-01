@@ -1,3 +1,6 @@
+import json
+import re
+
 from dotenv import load_dotenv
 import os
 
@@ -5,6 +8,7 @@ from fastapi import HTTPException
 from openai import OpenAI
 
 from Repository.RecipeRepository import RecipeRepository
+from Repository.PantryRepository import PantryRepository
 from Core.kafka_producer import kafka_producer
 from uuid import uuid4
 import asyncio
@@ -17,7 +21,7 @@ client = OpenAI(
     )
 
 pending_responses = {}
-RESPONSE_TIMEOUT = 20
+RESPONSE_TIMEOUT = 100
 
 
 class RecipeService:
@@ -55,3 +59,27 @@ class RecipeService:
         except asyncio.TimeoutError:
             pending_responses.pop(correlation_id, None)
             raise HTTPException(status_code=504, detail="Timed out waiting for response")
+
+    @staticmethod
+    async def ask_for_recipe(db, user_id):
+        correlation_id = str(uuid4())
+
+        available_ingredients = ""
+        ingredients_list = await PantryRepository.get_pantry_ingredients_by_userid(db, user_id)
+        for ingredient in ingredients_list.pantry_ingredients:
+            available_ingredients += f"{ingredient.ingredient.name}, "
+
+        payload = {
+            "id": correlation_id,
+            "tutorial": available_ingredients
+        }
+        future = asyncio.get_event_loop().create_future()
+        pending_responses[correlation_id] = future
+        await kafka_producer.send(topic=os.getenv("KAFKA_TOPIC"), value=payload)
+        try:
+            result = await asyncio.wait_for(future, timeout=RESPONSE_TIMEOUT)
+            return result
+        except asyncio.TimeoutError:
+            pending_responses.pop(correlation_id, None)
+            raise HTTPException(status_code=504, detail="Timed out waiting for response")
+        return result

@@ -9,6 +9,7 @@ from models.Recipe import Recipe, RecipeIngredients, RecipeSteps, SavedRecipe
 from Core.redis_client import redis_client
 
 
+
 def make_cache_key_recipe(recipe_id: int) -> str:
     return f"recipe:{recipe_id}"
 

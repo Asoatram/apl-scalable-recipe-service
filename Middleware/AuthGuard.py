@@ -15,6 +15,7 @@ class JWTBearer(HTTPBearer):
             raise HTTPException(status_code=403, detail="Invalid authorization scheme")
         try:
             payload = jwt.decode(credentials.credentials.strip(), key=SECRET_KEY, algorithms=[ALGORITHM])
+            request.state.user = payload
             return payload  # or return payload["sub"]
         except JWTError as e:
             raise HTTPException(status_code=403, detail=f"Invalid or expired token: {str(e)}")
